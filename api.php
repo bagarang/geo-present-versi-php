@@ -88,8 +88,7 @@ try {
         case 'login':
             $nip = trim($data['nip']);
             $pass = trim($data['password']);
-            
-            $stmt = $conn->prepare("SELECT NIP, Nama_Lengkap, Jabatan, Status, Foto_Profile_URL FROM karyawan WHERE NIP = :nip AND Password = :pass");
+            $stmt = $conn->prepare("SELECT NIP, Nama_Lengkap, Jabatan, Status, Foto_Profile_URL, Tanggal_Bergabung FROM karyawan WHERE NIP = :nip AND Password = :pass");
             $stmt->execute(['nip' => $nip, 'pass' => $pass]);
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -102,7 +101,6 @@ try {
         case 'adminLogin':
             $userReq = trim($data['username']);
             $passReq = trim($data['password']);
-            
             $stmt = $conn->query("SELECT * FROM config WHERE config_key IN ('ADMIN_USERNAME', 'ADMIN_PASSWORD')");
             $conf = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
@@ -118,6 +116,15 @@ try {
             $stmt = $conn->prepare("SELECT NIP, Nama_Lengkap, Jabatan, Status, Foto_Profile_URL FROM karyawan WHERE NIP = :nip");
             $stmt->execute(['nip' => $nip]);
             jsonResponse(true, 'Profile', $stmt->fetch(PDO::FETCH_ASSOC));
+            break;
+
+        case 'updateProfilePhoto':
+            $nip = trim($data['nip']);
+            $photoBase64 = $data['photoBase64'];
+            $photoUrl = saveBase64Image($photoBase64, $nip, 'profile');
+            $stmt = $conn->prepare("UPDATE karyawan SET Foto_Profile_URL = ? WHERE NIP = ?");
+            $stmt->execute([$photoUrl, $nip]);
+            jsonResponse(true, 'Foto profil berhasil diupdate', ['url' => $photoUrl]);
             break;
 
         case 'absen':
@@ -190,7 +197,7 @@ try {
             break;
 
         case 'getAllKaryawan':
-            $stmt = $conn->query("SELECT NIP, Nama_Lengkap, Jabatan, Status, Foto_Profile_URL FROM karyawan");
+            $stmt = $conn->query("SELECT NIP, Nama_Lengkap, Jabatan, Status, Foto_Profile_URL, Tanggal_Bergabung FROM karyawan");
             jsonResponse(true, 'Data Karyawan', $stmt->fetchAll(PDO::FETCH_ASSOC));
             break;
 
@@ -204,9 +211,36 @@ try {
             $stmt->execute($params);
             jsonResponse(true, 'Semua Absensi', $stmt->fetchAll(PDO::FETCH_ASSOC));
             break;
+
+        case 'ajukanIzin':
+            $nip = trim($data['nip']);
+            $jenis = trim($data['jenis']);
+            $tglMulai = trim($data['tanggalMulai']);
+            $tglSelesai = trim($data['tanggalSelesai']);
+            $alasan = trim($data['alasan']);
+            $lampiranBase64 = isset($data['lampiranBase64']) ? $data['lampiranBase64'] : '';
             
+            $id = 'P' . date('YmdHis');
+            $tglPengajuan = date('Y-m-d H:i:s');
+            $lampiranUrl = saveBase64Image($lampiranBase64, $nip, 'lampiran');
+            
+            // Query Insert yang sudah diperbaiki (Tanpa Kolom Nama)
+            $stmt = $conn->prepare("INSERT INTO pengajuan (ID, NIP, Jenis, Tanggal_Mulai, Tanggal_Selesai, Alasan, Lampiran_URL, Status, Tanggal_Pengajuan) VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?)");
+            $stmt->execute([$id, $nip, $jenis, $tglMulai, $tglSelesai, $alasan, $lampiranUrl, $tglPengajuan]);
+            
+            jsonResponse(true, 'Pengajuan berhasil dikirim');
+            break;
+
+        case 'getPengajuanByNip':
+            $nip = trim($data['nip']);
+            $stmt = $conn->prepare("SELECT * FROM pengajuan WHERE NIP = ? ORDER BY Tanggal_Pengajuan DESC");
+            $stmt->execute([$nip]);
+            jsonResponse(true, 'Data Pengajuan', $stmt->fetchAll(PDO::FETCH_ASSOC));
+            break;
+
         case 'getAllPengajuan':
-            $stmt = $conn->query("SELECT * FROM pengajuan ORDER BY Tanggal_Pengajuan DESC");
+            // Otomatis menggabungkan NIP dengan Nama_Lengkap dari tabel karyawan
+            $stmt = $conn->query("SELECT p.*, k.Nama_Lengkap as Nama FROM pengajuan p JOIN karyawan k ON p.NIP = k.NIP ORDER BY p.Tanggal_Pengajuan DESC");
             jsonResponse(true, 'Semua Pengajuan', $stmt->fetchAll(PDO::FETCH_ASSOC));
             break;
 
@@ -235,12 +269,23 @@ try {
             jsonResponse(true, 'Summary', $stmt->fetchAll(PDO::FETCH_ASSOC));
             break;
 
+        case 'getChartPerformance':
+            $bulan = isset($data['bulan']) ? $data['bulan'] : date('Y-m');
+            $stmt = $conn->prepare("
+                SELECT k.Nama_Lengkap as Nama, 
+                (SELECT COUNT(*) FROM absensi WHERE NIP = k.NIP AND Tanggal LIKE ? AND Status IN ('Hadir','Terlambat')) as Jumlah_Masuk
+                FROM karyawan k
+            ");
+            $param = $bulan . "%";
+            $stmt->execute([$param]);
+            jsonResponse(true, 'Chart Data', $stmt->fetchAll(PDO::FETCH_ASSOC));
+            break;
+
         default:
             jsonResponse(false, 'Action tidak dikenali: ' . $action);
             break;
     }
 
-// TANGKAP SEMUA ERROR (TERMASUK TABEL HILANG) DAN JADIKAN JSON
 } catch (Throwable $e) { 
     jsonResponse(false, 'Database Error: ' . $e->getMessage());
 }
