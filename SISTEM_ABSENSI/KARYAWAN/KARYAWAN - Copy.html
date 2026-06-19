@@ -1,0 +1,254 @@
+<script>
+    // URL API NGROK
+    const GAS_URL = "https://iguana-armchair-ranger.ngrok-free.dev/absensi/api.php";
+
+    // --- KUNCI BYPASS NGROK (Sapu Jagat untuk semua $.ajax) ---
+    $.ajaxSetup({
+        headers: { "ngrok-skip-browser-warning": "69420" }
+    });
+
+    // STATE LOKASI KARYAWAN
+    let currentLat = null;
+    let currentLng = null;
+
+    // --- CEK LOGIN & TAMPILKAN PROFIL ---
+    function checkLogin() {
+        const userNIP = localStorage.getItem('userNIP');
+        const userDataStr = localStorage.getItem('userData');
+
+        if (!userNIP || !userDataStr) {
+            // Jika belum login, pastikan modal login muncul dan tidak bisa ditutup (backdrop static)
+            $('#loginModal').modal({backdrop: 'static', keyboard: false});
+            $('#loginModal').modal('show');
+            return false;
+        }
+
+        // Tampilkan Data Profile di UI
+        const userData = JSON.parse(userDataStr);
+        $('#profile-name').text(userData.Nama_Lengkap);
+        $('#profile-nip').text(userData.NIP);
+        $('#profile-jabatan').text(userData.Jabatan);
+        if(userData.Foto_Profile_URL) {
+            $('#profile-img').attr('src', userData.Foto_Profile_URL);
+        }
+
+        return true;
+    }
+
+    // --- INISIALISASI PETA & LOKASI (LEAFLET.JS) ---
+    function initMap() {
+        var map = L.map('map').setView([-6.200000, 106.816666], 13); // Default Jakarta
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        var marker = L.marker([-6.200000, 106.816666]).addTo(map)
+            .bindPopup('Mencari lokasi Anda...')
+            .openPopup();
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(position) {
+                currentLat = position.coords.latitude;
+                currentLng = position.coords.longitude;
+                var latlng = [currentLat, currentLng];
+                
+                map.setView(latlng, 16);
+                marker.setLatLng(latlng).bindPopup('Lokasi Anda Saat Ini').openPopup();
+                $('#lokasi-status').html('<span class="text-success"><i class="fas fa-check-circle"></i> Lokasi Ditemukan</span>');
+                
+            }, function(error) {
+                console.error("Geoloc error:", error);
+                $('#lokasi-status').html('<span class="text-danger"><i class="fas fa-times-circle"></i> Gagal mendapatkan lokasi. Pastikan GPS aktif.</span>');
+            }, { enableHighAccuracy: true });
+        } else {
+            $('#lokasi-status').html('<span class="text-danger">Browser tidak mendukung Geolocation.</span>');
+        }
+    }
+
+    // --- INISIALISASI WEBCAM (WEBCAM.JS) ---
+    function initCamera() {
+        Webcam.set({
+            width: 320,
+            height: 240,
+            image_format: 'jpeg',
+            jpeg_quality: 90,
+            facingMode: "user" // Gunakan kamera depan di HP
+        });
+        Webcam.attach('#my_camera');
+    }
+
+    // --- AMBIL FOTO KEMBALIKAN BASE64 ---
+    function capturePhoto(callback) {
+        Webcam.snap(function(data_uri) {
+            callback(data_uri);
+        });
+    }
+
+    // --- PROSES ABSEN (MASUK / PULANG) ---
+    function submitAbsen(type) {
+        if(!currentLat || !currentLng) {
+            alert("Tunggu sebentar, lokasi Anda belum ditemukan. Pastikan GPS aktif.");
+            return;
+        }
+
+        const userNIP = localStorage.getItem('userNIP');
+        if(!userNIP) return alert("Silakan login terlebih dahulu.");
+
+        const btn = (type === 'masuk') ? $('#btn-absen-masuk') : $('#btn-absen-pulang');
+        btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Memproses...');
+
+        // Ambil Foto
+        capturePhoto(function(photoBase64) {
+            
+            // Payload
+            const payload = {
+                action: 'absen',
+                nip: userNIP,
+                type: type,
+                lat: currentLat,
+                lng: currentLng,
+                photoBase64: photoBase64
+            };
+
+            $.ajax({
+                url: GAS_URL,
+                type: "POST",
+                data: JSON.stringify(payload),
+                contentType: "application/json",
+                success: function(response) {
+                    if (response.success) {
+                        alert(`Absen ${type} BERHASIL!\nJam: ${response.data.jam}\nLokasi: ${response.data.lokasi}`);
+                        loadRiwayatAbsensi(); // Update riwayat
+                    } else {
+                        alert(`GAGAL Absen: ${response.message}`);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error Detail:", xhr.responseText);
+                    alert("Terjadi kesalahan koneksi ke server.");
+                },
+                complete: function() {
+                    // Kembalikan tombol
+                    if(type === 'masuk') btn.prop('disabled', false).html('<i class="fas fa-sign-in-alt"></i> ABSEN MASUK');
+                    if(type === 'pulang') btn.prop('disabled', false).html('<i class="fas fa-sign-out-alt"></i> ABSEN PULANG');
+                }
+            });
+        });
+    }
+
+    // --- LOAD RIWAYAT ABSENSI KARYAWAN LOGIN ---
+    function loadRiwayatAbsensi(bulan = '') {
+        const userNIP = localStorage.getItem('userNIP');
+        if(!userNIP) return;
+
+        $('#tabel-riwayat').html('<tr><td colspan="5" class="text-center">Mengambil data...</td></tr>');
+
+        $.ajax({
+            url: GAS_URL,
+            type: "POST",
+            data: JSON.stringify({ action: 'getAbsensiByNip', nip: userNIP, bulan: bulan }),
+            contentType: "application/json",
+            success: function(response) {
+                if (response.success && response.data.length > 0) {
+                    let html = '';
+                    response.data.forEach(function(item) {
+                        html += `<tr>
+                            <td>${item.Tanggal}</td>
+                            <td>${item.Jam_Masuk || '-'}</td>
+                            <td>${item.Jam_Pulang || '-'}</td>
+                            <td><span class="badge ${item.Status === 'Hadir' ? 'bg-success' : (item.Status === 'Terlambat' ? 'bg-warning' : 'bg-secondary')}">${item.Status}</span></td>
+                        </tr>`;
+                    });
+                    $('#tabel-riwayat').html(html);
+                } else {
+                    $('#tabel-riwayat').html(`<tr><td colspan="5" class="text-center text-danger">Tidak ada riwayat absensi.</td></tr>`);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error(error);
+                $('#tabel-riwayat').html('<tr><td colspan="5" class="text-center text-danger">Gagal memuat riwayat.</td></tr>');
+            }
+        });
+    }
+
+    // --- LOGOUT KARYAWAN ---
+    function logout() {
+        if(confirm('Yakin ingin keluar?')) {
+            localStorage.removeItem('userNIP');
+            localStorage.removeItem('userData');
+            window.location.reload();
+        }
+    }
+
+    // ==========================================
+    // EVENT LISTENERS & INISIALISASI AWAL
+    // ==========================================
+    $(document).ready(function() {
+        
+        // Cek Login Saat Muat
+        if (checkLogin()) {
+            // Jika sudah login, inisialisasi fitur
+            setTimeout(initMap, 500); // Delay sedikit agar div map siap
+            initCamera();
+            
+            // Set default bulan dan load riwayat
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            let mm = now.getMonth() + 1;
+            if(mm < 10) mm = '0' + mm;
+            
+            const currentMonth = yyyy + '-' + mm;
+            $('#filter-bulan-riwayat').val(currentMonth);
+            loadRiwayatAbsensi(currentMonth);
+        }
+
+        // Fungsi submit form login via Modal Karyawan
+        $('#loginForm').submit(function(e) {
+            e.preventDefault();
+            const nip = $('#nip').val();
+            const password = $('#password').val();
+            const btn = $('#btnLogin');
+            
+            btn.prop('disabled', true).text('Loading...');
+
+            $.ajax({
+                url: GAS_URL + "?action=login",
+                type: "POST",
+                data: JSON.stringify({ nip: nip, password: password }),
+                contentType: "application/json",
+                success: function(response) {
+                    if (response.success) {
+                        localStorage.setItem('userNIP', response.data.NIP);
+                        localStorage.setItem('userData', JSON.stringify(response.data));
+                        
+                        alert('Login Berhasil!');
+                        window.location.reload(); 
+                    } else {
+                        alert('Login Gagal: ' + response.message);
+                        btn.prop('disabled', false).text('Login');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error("Error Detail:", xhr.responseText);
+                    alert('Terjadi kesalahan server. Coba lagi.');
+                    btn.prop('disabled', false).text('Login');
+                }
+            });
+        });
+
+        // Tombol Logout
+        $('#btn-logout').click(function(e) {
+            e.preventDefault();
+            logout();
+        });
+
+        // Filter Bulan Berubah
+        $('#filter-bulan-riwayat').change(function() {
+            loadRiwayatAbsensi($(this).val());
+        });
+
+        // Tombol Absen Masuk & Pulang
+        $('#btn-absen-masuk').click(function() { submitAbsen('masuk'); });
+        $('#btn-absen-pulang').click(function() { submitAbsen('pulang'); });
+    });
+</script>

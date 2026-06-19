@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard - Sistem Absensi</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{
+    --primary:#2563eb;
+    --primary-dark:#1d4ed8;
+    --bg:#f3f4f6;
+    --card:#ffffff;
+    --text:#1f2937;
+    --muted:#6b7280;
+    --border:#e5e7eb;
+    --success:#16a34a;
+    --danger:#dc2626;
+    --warning:#d97706;
+    --sidebar-w:230px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    background:var(--bg); color:var(--text);
+  }
+
+  /* ---------- LOGIN ---------- */
+  #screen-login{
+    height:100vh; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--primary), var(--primary-dark));
+  }
+  .login-card{
+    background:var(--card); width:360px; border-radius:16px; padding:32px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.2);
+  }
+  .login-card h1{font-size:22px; text-align:center; margin-bottom:6px;}
+  .login-card p.sub{text-align:center; color:var(--muted); font-size:13px; margin-bottom:22px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:13px; font-weight:600; margin-bottom:6px;}
+  .field input, .field select{
+    width:100%; padding:11px 13px; border:1px solid var(--border);
+    border-radius:8px; font-size:14px; background:#f9fafb;
+  }
+  .field input:focus, .field select:focus{outline:2px solid var(--primary); background:#fff;}
+  .btn{
+    padding:10px 18px; border:none; border-radius:8px; font-size:14px;
+    font-weight:600; cursor:pointer; transition:opacity .15s;
+  }
+  .btn:active{opacity:.8;}
+  .btn-primary{background:var(--primary); color:#fff; width:100%;}
+  .btn-sm{padding:6px 12px; font-size:12px; border-radius:6px;}
+  .btn-success{background:var(--success); color:#fff;}
+  .btn-danger{background:var(--danger); color:#fff;}
+  .btn-outline{background:#fff; border:1px solid var(--border); color:var(--text);}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+  .error-msg{
+    background:#fef2f2; color:var(--danger); border:1px solid #fecaca;
+    border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:12px;
+  }
+
+  /* ---------- LAYOUT ---------- */
+  #screen-main{display:flex; min-height:100vh;}
+  .sidebar{
+    width:var(--sidebar-w); background:#111827; color:#fff;
+    display:flex; flex-direction:column; flex-shrink:0;
+  }
+  .sidebar .brand{
+    padding:22px 20px; font-size:17px; font-weight:700; border-bottom:1px solid #1f2937;
+  }
+  .sidebar .brand small{display:block; font-size:11px; color:#9ca3af; font-weight:400; margin-top:2px;}
+  .sidebar nav{flex:1; padding:12px;}
+  .nav-link{
+    display:flex; align-items:center; gap:10px;
+    padding:11px 14px; border-radius:8px; color:#d1d5db;
+    text-decoration:none; font-size:14px; margin-bottom:4px; cursor:pointer;
+    border:none; background:none; width:100%; text-align:left;
+  }
+  .nav-link:hover{background:#1f2937;}
+  .nav-link.active{background:var(--primary); color:#fff; font-weight:600;}
+  .sidebar .logout-area{padding:12px; border-top:1px solid #1f2937;}
+
+  .main{flex:1; min-width:0; display:flex; flex-direction:column;}
+  .topbar{
+    background:var(--card); padding:16px 28px; border-bottom:1px solid var(--border);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .topbar h2{font-size:18px;}
+  .topbar .meta{font-size:13px; color:var(--muted);}
+  .content{padding:24px 28px; flex:1; overflow-x:auto;}
+
+  /* ---------- CARDS / STATS ---------- */
+  .stat-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; margin-bottom:20px;}
+  .stat-card{
+    background:var(--card); border-radius:12px; padding:18px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.06);
+  }
+  .stat-card .num{font-size:26px; font-weight:700;}
+  .stat-card .lbl{font-size:13px; color:var(--muted); margin-top:4px;}
+
+  .card{
+    background:var(--card); border-radius:12px; padding:20px; margin-bottom:20px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.06);
+  }
+  .card-header{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:16px; flex-wrap:wrap; gap:10px;
+  }
+  .card-header h3{font-size:16px;}
+  .toolbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .toolbar input, .toolbar select{
+    padding:8px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px;
+  }
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th, td{padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap;}
+  th{background:#f9fafb; font-weight:600; color:var(--muted); font-size:12px; text-transform:uppercase;}
+  tr:hover td{background:#f9fafb;}
+  td.wrap{white-space:normal;}
+
+  .status-badge{
+    display:inline-block; padding:3px 10px; border-radius:20px;
+    font-size:12px; font-weight:600; white-space:nowrap;
+  }
+  .badge-hadir{background:#dcfce7; color:var(--success);}
+  .badge-terlambat{background:#fef3c7; color:var(--warning);}
+  .badge-pending{background:#fef3c7; color:var(--warning);}
+  .badge-approved{background:#dcfce7; color:var(--success);}
+  .badge-rejected{background:#fee2e2; color:var(--danger);}
+  .badge-aktif{background:#dcfce7; color:var(--success);}
+  .badge-nonaktif{background:#f3f4f6; color:var(--muted);}
+
+  .avatar{width:32px; height:32px; border-radius:50%; object-fit:cover; background:#e5e7eb; vertical-align:middle;}
+  .photo-link{color:var(--primary); text-decoration:none; font-size:12px;}
+  .photo-thumb{width:48px; height:48px; border-radius:8px; object-fit:cover; background:#e5e7eb; cursor:pointer;}
+
+  .hidden{display:none !important;}
+  .page-section{display:none;}
+  .page-section.active{display:block;}
+
+  .loading-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.3);
+    display:flex; align-items:center; justify-content:center; z-index:100;
+  }
+  .spinner{
+    width:40px; height:40px; border:4px solid #fff; border-top-color:var(--primary);
+    border-radius:50%; animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .toast{
+    position:fixed; top:20px; right:20px; background:#1f2937; color:#fff;
+    padding:12px 20px; border-radius:8px; font-size:13px; z-index:200; max-width:360px;
+  }
+
+  .modal-bg{
+    position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex;
+    align-items:center; justify-content:center; z-index:150;
+  }
+  .modal{
+    background:#fff; border-radius:12px; padding:24px; width:420px; max-width:90vw;
+    max-height:85vh; overflow-y:auto;
+  }
+  .modal h3{margin-bottom:14px; font-size:16px;}
+  .modal img{width:100%; border-radius:8px; margin-bottom:10px;}
+  .modal-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:16px;}
+
+  .chart-wrap{height:340px;}
+
+  @media(max-width:900px){
+    .stat-grid{grid-template-columns:repeat(2,1fr);}
+    .sidebar{width:64px;}
+    .sidebar .brand span.full, .nav-link span.label{display:none;}
+    .sidebar .brand{padding:18px 10px; text-align:center;}
+  }
+</style>
+</head>
+<body>
+
+<div id="screen-login">
+  <div class="login-card">
+    <h1>🛠️ Admin Dashboard</h1>
+    <p class="sub">Sistem Absensi Karyawan</p>
+    <div id="login-error"></div>
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="input-username" placeholder="admin">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="input-password" placeholder="••••••••">
+    </div>
+    <button class="btn btn-primary" id="btn-login">Masuk</button>
+  </div>
+</div>
+
+<div id="screen-main" class="hidden">
+  <div class="sidebar">
+    <div class="brand">📍 <span class="full">Absensi Admin</span><small class="full">Sistem Absensi Karyawan</small></div>
+    <nav>
+      <button class="nav-link active" data-page="dashboard">📊 <span class="label">Dashboard</span></button>
+      <button class="nav-link" data-page="absensi">🕒 <span class="label">Data Absensi</span></button>
+      <button class="nav-link" data-page="performa">📈 <span class="label">Performa</span></button>
+      <button class="nav-link" data-page="pengajuan">📝 <span class="label">Pengajuan</span></button>
+      <button class="nav-link" data-page="karyawan">👥 <span class="label">Karyawan</span></button>
+    </nav>
+    <div class="logout-area">
+      <button class="nav-link" id="btn-logout">🚪 <span class="label">Keluar</span></button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <h2 id="page-title">Dashboard</h2>
+      <span class="meta" id="current-date"></span>
+    </div>
+
+    <div class="content">
+
+      <div class="page-section active" id="page-dashboard">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="num" id="stat-karyawan">-</div><div class="lbl">Total Karyawan</div></div>
+          <div class="stat-card"><div class="num" id="stat-masuk">-</div><div class="lbl">Total Kehadiran (Bulan ini)</div></div>
+          <div class="stat-card"><div class="num" id="stat-izin">-</div><div class="lbl">Izin / Sakit / Cuti</div></div>
+          <div class="stat-card"><div class="num" id="stat-pending">-</div><div class="lbl">Pengajuan Pending</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>Rekap Karyawan</h3>
+            <div class="toolbar">
+              <input type="month" id="dash-bulan">
+              <input type="text" id="dash-search" placeholder="Cari nama...">
+              <button class="btn btn-outline btn-sm" id="btn-export-rekap">⬇️ Export Excel</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>NIP</th><th>Nama</th><th>Jabatan</th>
+                <th>Jumlah Masuk</th><th>Izin</th><th>Cuti</th><th>Sakit</th>
+              </tr>
+            </thead>
+            <tbody id="dash-table-body"></tbody>
+          </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-section" id="page-absensi">
+        <div class="card">
+          <div class="card-header">
+            <h3>Data Absensi</h3>
+            <div class="toolbar">
+              <input type="month" id="absen-bulan">
+              <select id="absen-filter-nama"><option value="">Semua Karyawan</option></select>
+              <button class="btn btn-outline btn-sm" id="btn-export-absensi">⬇️ Export Excel</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Tanggal</th><th>NIP</th><th>Nama</th>
+                <th>Jam Masuk</th><th>Foto Masuk</th><th>Lokasi Masuk</th>
+                <th>Jam Pulang</th><th>Foto Pulang</th><th>Lokasi Pulang</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="absen-table-body"></tbody>
+          </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-section" id="page-performa">
+        <div class="card">
+          <div class="card-header">
+            <h3>Grafik Performa Kehadiran (basis 20 hari kerja)</h3>
+            <div class="toolbar">
+              <input type="month" id="chart-bulan">
+            </div>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="performaChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-section" id="page-pengajuan">
+        <div class="card">
+          <div class="card-header">
+            <h3>Pengajuan Izin / Sakit / Cuti</h3>
+            <div class="toolbar">
+              <select id="pengajuan-filter-status">
+                <option value="">Semua Status</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+              <button class="btn btn-outline btn-sm" id="btn-export-pengajuan">⬇️ Export PDF</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Tanggal Ajuan</th><th>NIP</th><th>Nama</th><th>Jenis</th>
+                <th>Periode</th><th>Alasan</th><th>Lampiran</th><th>Status</th><th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="pengajuan-table-body"></tbody>
+          </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="page-section" id="page-karyawan">
+        <div class="card">
+          <div class="card-header">
+            <h3>Data Karyawan</h3>
+            <div class="toolbar">
+              <input type="text" id="karyawan-search" placeholder="Cari nama / NIP...">
+              <button class="btn btn-outline btn-sm" id="btn-export-karyawan">⬇️ Export Excel</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Foto</th><th>NIP</th><th>Nama</th><th>Jabatan</th><th>Status</th><th>Bergabung</th>
+              </tr>
+            </thead>
+            <tbody id="karyawan-table-body"></tbody>
+          </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg hidden" id="modal-approval">
+  <div class="modal">
+    <h3 id="modal-title">Approval Pengajuan</h3>
+    <div id="modal-detail" style="font-size:13px; margin-bottom:12px; line-height:1.6;"></div>
+    <div class="field">
+      <label>Catatan Admin (opsional)</label>
+      <input type="text" id="modal-catatan" placeholder="Tambahkan catatan...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="modal-cancel">Batal</button>
+      <button class="btn btn-danger" id="modal-reject">Tolak</button>
+      <button class="btn btn-success" id="modal-approve">Setujui</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg hidden" id="modal-foto">
+  <div class="modal" style="width:360px;">
+    <h3 id="modal-foto-title">Foto Absensi</h3>
+    <img id="modal-foto-img" src="">
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="modal-foto-close">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+ * KONFIGURASI
+ * ============================================================ */
+const GAS_URL = 'http://localhost/absensi/api.php';
+
+/* ============================================================
+ * STATE
+ * ============================================================ */
+let isAdmin = sessionStorage.getItem('absensi_admin') === 'true';
+let allKaryawan = [];
+let allAbsensi = [];
+let allPengajuan = [];
+let dashboardSummary = [];
+let performaChart = null;
+let pendingApprovalId = null;
+let pendingApprovalAction = null;
+
+/* ============================================================
+ * UTIL
+ * ============================================================ */
+function showLoading(show){
+  let el = document.getElementById('loading-overlay');
+  if(show){
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'loading-overlay';
+      el.className = 'loading-overlay';
+      el.innerHTML = '<div class="spinner"></div>';
+      document.body.appendChild(el);
+    }
+  } else if(el) el.remove();
+}
+
+function toast(msg, duration){
+  duration = duration || 2500;
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), duration);
+}
+
+async function apiGet(action, params){
+  params = params || {};
+  let url = GAS_URL + '?action=' + action + '&_=' + Date.now();
+  for(const k in params){
+    if(params[k] !== undefined && params[k] !== null && params[k] !== ''){
+      url += '&' + k + '=' + encodeURIComponent(params[k]);
+    }
+  }
+  const res = await fetch(url, {
+    headers: {
+      "ngrok-skip-browser-warning": "69420"
+    }
+  });
+  return res.json();
+}
+
+async function apiPost(body){
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'text/plain;charset=utf-8',
+      'ngrok-skip-browser-warning': '69420'
+    },
+    body: JSON.stringify(body)
+  });
+  return res.json();
+}
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function currentMonth(){
+  const d = new Date();
+  return d.getFullYear() + '-' + pad(d.getMonth()+1);
+}
+
+/* ============================================================
+ * LOGIN
+ * ============================================================ */
+document.getElementById('btn-login').addEventListener('click', async () => {
+  const username = document.getElementById('input-username').value.trim();
+  const password = document.getElementById('input-password').value.trim();
+  const errorBox = document.getElementById('login-error');
+  errorBox.innerHTML = '';
+
+  if(!username || !password){
+    errorBox.innerHTML = '<div class="error-msg">Username dan Password wajib diisi</div>';
+    return;
+  }
+
+  showLoading(true);
+  try{
+    const res = await apiPost({ action:'adminLogin', username, password });
+    showLoading(false);
+    if(res.success){
+      sessionStorage.setItem('absensi_admin', 'true');
+      initMainApp();
+    } else {
+      errorBox.innerHTML = '<div class="error-msg">' + res.message + '</div>';
+    }
+  } catch(err){
+    showLoading(false);
+    errorBox.innerHTML = '<div class="error-msg">Gagal terhubung ke server: ' + err.message + '</div>';
+  }
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  if(confirm('Yakin ingin keluar?')){
+    sessionStorage.removeItem('absensi_admin');
+    document.getElementById('screen-main').classList.add('hidden');
+    document.getElementById('screen-login').classList.remove('hidden');
+  }
+});
+
+/* ============================================================
+ * INIT
+ * ============================================================ */
+function initMainApp(){
+  document.getElementById('screen-login').classList.add('hidden');
+  document.getElementById('screen-main').classList.remove('hidden');
+
+  const now = new Date();
+  const hari = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][now.getDay()];
+  const bulanNama = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][now.getMonth()];
+  document.getElementById('current-date').textContent = hari + ', ' + now.getDate() + ' ' + bulanNama + ' ' + now.getFullYear();
+
+  document.getElementById('dash-bulan').value = currentMonth();
+  document.getElementById('absen-bulan').value = currentMonth();
+  document.getElementById('chart-bulan').value = currentMonth();
+
+  loadAllData();
+}
+
+if(isAdmin) initMainApp();
+
+/* ============================================================
+ * SIDEBAR NAV
+ * ============================================================ */
+const titles = {
+  dashboard:'Dashboard', absensi:'Data Absensi', performa:'Performa Karyawan',
+  pengajuan:'Pengajuan Izin/Sakit/Cuti', karyawan:'Data Karyawan'
+};
+document.querySelectorAll('.nav-link[data-page]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-link[data-page]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const page = btn.dataset.page;
+    document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.getElementById('page-title').textContent = titles[page];
+
+    if(page === 'performa') renderChart();
+  });
+});
+
+/* ============================================================
+ * LOAD ALL DATA
+ * ============================================================ */
+async function loadAllData(){
+  showLoading(true);
+  try{
+    const [karyawanRes, absensiRes, pengajuanRes, summaryRes] = await Promise.all([
+      apiGet('getAllKaryawan'),
+      apiGet('getAllAbsensi'),
+      apiGet('getAllPengajuan'),
+      apiGet('getDashboardSummary', { bulan: currentMonth() })
+    ]);
+
+    allKaryawan = karyawanRes.success ? karyawanRes.data : [];
+    allAbsensi = absensiRes.success ? absensiRes.data : [];
+    allPengajuan = pengajuanRes.success ? pengajuanRes.data : [];
+    dashboardSummary = summaryRes.success ? summaryRes.data : [];
+
+    renderStats();
+    renderDashboardTable();
+    renderKaryawanFilter();
+    renderAbsensiTable();
+    renderPengajuanTable();
+    renderKaryawanTable();
+  } catch(err){
+    toast('Gagal memuat data: ' + err.message, 4000);
+  }
+  showLoading(false);
+}
+
+/* ============================================================
+ * STATS
+ * ============================================================ */
+function renderStats(){
+  document.getElementById('stat-karyawan').textContent = allKaryawan.length;
+
+  const totalMasuk = dashboardSummary.reduce((sum, r) => sum + (Number(r.Jumlah_Masuk) || 0), 0);
+  document.getElementById('stat-masuk').textContent = totalMasuk;
+
+  const totalIzin = dashboardSummary.reduce((sum, r) =>
+    sum + (Number(r.Jumlah_Izin)||0) + (Number(r.Jumlah_Cuti)||0) + (Number(r.Jumlah_Sakit)||0), 0);
+  document.getElementById('stat-izin').textContent = totalIzin;
+
+  const pending = allPengajuan.filter(p => p.Status === 'Pending').length;
+  document.getElementById('stat-pending').textContent = pending;
+}
+
+/* ============================================================
+ * DASHBOARD - REKAP TABLE
+ * ============================================================ */
+async function refreshDashboardSummary(){
+  const bulan = document.getElementById('dash-bulan').value;
+  showLoading(true);
+  const res = await apiGet('getDashboardSummary', { bulan });
+  dashboardSummary = res.success ? res.data : [];
+  showLoading(false);
+  renderStats();
+  renderDashboardTable();
+}
+
+function renderDashboardTable(){
+  const search = document.getElementById('dash-search').value.toLowerCase();
+  const tbody = document.getElementById('dash-table-body');
+
+  const filtered = dashboardSummary.filter(r =>
+    !search || String(r.Nama).toLowerCase().includes(search) || String(r.NIP).toLowerCase().includes(search)
+  );
+
+  if(filtered.length === 0){
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">Tidak ada data</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => `
+    <tr>
+      <td>${r.NIP}</td>
+      <td>${r.Nama}</td>
+      <td>${r.Jabatan}</td>
+      <td>${r.Jumlah_Masuk}</td>
+      <td>${r.Jumlah_Izin}</td>
+      <td>${r.Jumlah_Cuti}</td>
+      <td>${r.Jumlah_Sakit}</td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('dash-bulan').addEventListener('change', refreshDashboardSummary);
+document.getElementById('dash-search').addEventListener('input', renderDashboardTable);
+
+document.getElementById('btn-export-rekap').addEventListener('click', () => {
+  const data = dashboardSummary.map(r => ({
+    NIP: r.NIP, Nama: r.Nama, Jabatan: r.Jabatan,
+    'Jumlah Masuk': r.Jumlah_Masuk, Izin: r.Jumlah_Izin, Cuti: r.Jumlah_Cuti, Sakit: r.Jumlah_Sakit
+  }));
+  exportExcel(data, 'Rekap_Karyawan_' + document.getElementById('dash-bulan').value + '.xlsx', 'Rekap');
+});
+
+/* ============================================================
+ * DATA ABSENSI
+ * ============================================================ */
+function renderKaryawanFilter(){
+  const sel = document.getElementById('absen-filter-nama');
+  sel.innerHTML = '<option value="">Semua Karyawan</option>' +
+    allKaryawan.map(k => `<option value="${k.NIP}">${k.Nama_Lengkap} (${k.NIP})</option>`).join('');
+}
+
+async function refreshAbsensi(){
+  const bulan = document.getElementById('absen-bulan').value;
+  showLoading(true);
+  const res = await apiGet('getAllAbsensi', { bulan });
+  allAbsensi = res.success ? res.data : [];
+  showLoading(false);
+  renderAbsensiTable();
+}
+
+function renderAbsensiTable(){
+  const nipFilter = document.getElementById('absen-filter-nama').value;
+  const tbody = document.getElementById('absen-table-body');
+
+  let rows = allAbsensi;
+  if(nipFilter) rows = rows.filter(r => String(r.NIP) === nipFilter);
+
+  if(rows.length === 0){
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--muted);">Tidak ada data</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const badgeClass = r.Status === 'Terlambat' ? 'badge-terlambat' : 'badge-hadir';
+    return `
+      <tr>
+        <td>${r.Tanggal}</td>
+        <td>${r.NIP}</td>
+        <td>${r.Nama}</td>
+        <td>${r.Jam_Masuk || '-'}</td>
+        <td>${fotoCell(r.Foto_Masuk_URL)}</td>
+        <td>${lokasiCell(r.Lokasi_Masuk)}</td>
+        <td>${r.Jam_Pulang || '-'}</td>
+        <td>${fotoCell(r.Foto_Pulang_URL)}</td>
+        <td>${lokasiCell(r.Lokasi_Pulang)}</td>
+        <td><span class="status-badge ${badgeClass}">${r.Status || '-'}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function fotoCell(url){
+  if(!url) return '-';
+  return `<img class="photo-thumb" src="${url}" onclick="openFotoModal('${url}')">`;
+}
+
+function lokasiCell(loc){
+  if(!loc) return '-';
+  const parts = String(loc).split(',');
+  if(parts.length !== 2) return loc;
+  const mapUrl = `https://www.google.com/maps?q=${parts[0]},${parts[1]}`;
+  return `<a class="photo-link" href="${mapUrl}" target="_blank">📍 Lihat Peta</a>`;
+}
+
+function openFotoModal(url){
+  document.getElementById('modal-foto-img').src = url;
+  document.getElementById('modal-foto').classList.remove('hidden');
+}
+document.getElementById('modal-foto-close').addEventListener('click', () => {
+  document.getElementById('modal-foto').classList.add('hidden');
+});
+
+document.getElementById('absen-bulan').addEventListener('change', refreshAbsensi);
+document.getElementById('absen-filter-nama').addEventListener('change', renderAbsensiTable);
+
+document.getElementById('btn-export-absensi').addEventListener('click', () => {
+  const data = allAbsensi.map(r => ({
+    Tanggal: r.Tanggal, NIP: r.NIP, Nama: r.Nama,
+    Jam_Masuk: r.Jam_Masuk, Foto_Masuk: r.Foto_Masuk_URL, Lokasi_Masuk: r.Lokasi_Masuk,
+    Jam_Pulang: r.Jam_Pulang, Foto_Pulang: r.Foto_Pulang_URL, Lokasi_Pulang: r.Lokasi_Pulang,
+    Status: r.Status
+  }));
+  exportExcel(data, 'Data_Absensi_' + document.getElementById('absen-bulan').value + '.xlsx', 'Absensi');
+});
+
+/* ============================================================
+ * PERFORMA CHART
+ * ============================================================ */
+async function renderChart(){
+  const bulan = document.getElementById('chart-bulan').value || currentMonth();
+  showLoading(true);
+  const res = await apiGet('getChartPerformance', { bulan });
+  showLoading(false);
+  if(!res.success) return;
+
+  const data = res.data;
+  const ctx = document.getElementById('performaChart').getContext('2d');
+
+  if(performaChart) performaChart.destroy();
+  performaChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.Nama),
+      datasets: [{
+        label: 'Jumlah Hadir',
+        data: data.map(d => d.Jumlah_Masuk),
+        backgroundColor: '#2563eb',
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive:true,
+      maintainAspectRatio:false,
+      scales: {
+        y: { beginAtZero:true, max:20, title:{display:true, text:'Hari Hadir (dari 20 hari)'} }
+      },
+      plugins: { legend: { display:false } }
+    }
+  });
+}
+
+document.getElementById('chart-bulan').addEventListener('change', renderChart);
+
+/* ============================================================
+ * PENGAJUAN + APPROVAL
+ * ============================================================ */
+function renderPengajuanTable(){
+  const filterStatus = document.getElementById('pengajuan-filter-status').value;
+  const tbody = document.getElementById('pengajuan-table-body');
+
+  let rows = allPengajuan;
+  if(filterStatus) rows = rows.filter(r => r.Status === filterStatus);
+
+  if(rows.length === 0){
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:var(--muted);">Tidak ada data</td></tr>';
+    return;
+  }
+
+  const badgeMap = { Pending:'badge-pending', Approved:'badge-approved', Rejected:'badge-rejected' };
+
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.Tanggal_Pengajuan}</td>
+      <td>${r.NIP}</td>
+      <td>${r.Nama}</td>
+      <td>${r.Jenis}</td>
+      <td>${r.Tanggal_Mulai} - ${r.Tanggal_Selesai}</td>
+      <td class="wrap" style="max-width:200px;">${r.Alasan}</td>
+      <td>${r.Lampiran_URL ? `<a class="photo-link" href="${r.Lampiran_URL}" target="_blank">Lihat</a>` : '-'}</td>
+      <td><span class="status-badge ${badgeMap[r.Status]||'badge-pending'}">${r.Status}</span></td>
+      <td>
+        ${r.Status === 'Pending' ? `
+          <button class="btn btn-success btn-sm" onclick="openApprovalModal('${r.ID}','Approved','${escapeQuote(r.Nama)}','${r.Jenis}','${r.Tanggal_Mulai} - ${r.Tanggal_Selesai}')">Setujui</button>
+          <button class="btn btn-danger btn-sm" onclick="openApprovalModal('${r.ID}','Rejected','${escapeQuote(r.Nama)}','${r.Jenis}','${r.Tanggal_Mulai} - ${r.Tanggal_Selesai}')">Tolak</button>
+        ` : (r.Catatan_Admin || '-')}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function escapeQuote(str){
+  return String(str).replace(/'/g, "\\'");
+}
+
+document.getElementById('pengajuan-filter-status').addEventListener('change', renderPengajuanTable);
+
+function openApprovalModal(id, action, nama, jenis, periode){
+  pendingApprovalId = id;
+  pendingApprovalAction = action;
+  document.getElementById('modal-title').textContent =
+    (action === 'Approved' ? 'Setujui' : 'Tolak') + ' Pengajuan';
+  document.getElementById('modal-detail').innerHTML =
+    `<b>${nama}</b><br>${jenis} - ${periode}`;
+  document.getElementById('modal-catatan').value = '';
+
+  // Tampilkan hanya tombol yang relevan
+  document.getElementById('modal-approve').classList.toggle('hidden', action !== 'Approved');
+  document.getElementById('modal-reject').classList.toggle('hidden', action !== 'Rejected');
+
+  document.getElementById('modal-approval').classList.remove('hidden');
+}
+
+document.getElementById('modal-cancel').addEventListener('click', () => {
+  document.getElementById('modal-approval').classList.add('hidden');
+});
+
+async function processApproval(status){
+  const catatan = document.getElementById('modal-catatan').value.trim();
+  const action = status === 'Approved' ? 'approvePengajuan' : 'rejectPengajuan';
+
+  showLoading(true);
+  try{
+    const res = await apiPost({ action, id: pendingApprovalId, catatan });
+    showLoading(false);
+    document.getElementById('modal-approval').classList.add('hidden');
+
+    if(res.success){
+      toast('✓ ' + res.data.message);
+      const pengajuanRes = await apiGet('getAllPengajuan');
+      allPengajuan = pengajuanRes.success ? pengajuanRes.data : [];
+      renderPengajuanTable();
+      renderStats();
+    } else {
+      toast('✗ ' + res.message, 4000);
+    }
+  } catch(err){
+    showLoading(false);
+    toast('Gagal: ' + err.message, 4000);
+  }
+}
+
+document.getElementById('modal-approve').addEventListener('click', () => processApproval('Approved'));
+document.getElementById('modal-reject').addEventListener('click', () => processApproval('Rejected'));
+
+document.getElementById('btn-export-pengajuan').addEventListener('click', () => {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.text('Laporan Pengajuan Izin/Sakit/Cuti', 14, 14);
+
+  const rows = allPengajuan.map(r => [
+    r.Tanggal_Pengajuan, r.NIP, r.Nama, r.Jenis,
+    r.Tanggal_Mulai + ' - ' + r.Tanggal_Selesai, r.Alasan, r.Status, r.Catatan_Admin || ''
+  ]);
+
+  doc.autoTable({
+    head: [['Tgl Ajuan','NIP','Nama','Jenis','Periode','Alasan','Status','Catatan']],
+    body: rows,
+    startY: 20,
+    styles: { fontSize: 8 }
+  });
+
+  doc.save('Laporan_Pengajuan.pdf');
+});
+
+/* ============================================================
+ * KARYAWAN
+ * ============================================================ */
+function renderKaryawanTable(){
+  const search = document.getElementById('karyawan-search').value.toLowerCase();
+  const tbody = document.getElementById('karyawan-table-body');
+
+  const filtered = allKaryawan.filter(k =>
+    !search || String(k.Nama_Lengkap).toLowerCase().includes(search) || String(k.NIP).toLowerCase().includes(search)
+  );
+
+  if(filtered.length === 0){
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted);">Tidak ada data</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(k => {
+    const badgeClass = String(k.Status).toLowerCase() === 'aktif' ? 'badge-aktif' : 'badge-nonaktif';
+    const fotoUrl = k.Foto_Profile_URL || 'https://via.placeholder.com/32x32.png?text=?';
+    return `
+      <tr>
+        <td><img class="avatar" src="${fotoUrl}"></td>
+        <td>${k.NIP}</td>
+        <td>${k.Nama_Lengkap}</td>
+        <td>${k.Jabatan}</td>
+        <td><span class="status-badge ${badgeClass}">${k.Status}</span></td>
+        <td>${k.Tanggal_Bergabung}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+document.getElementById('karyawan-search').addEventListener('input', renderKaryawanTable);
+
+document.getElementById('btn-export-karyawan').addEventListener('click', () => {
+  const data = allKaryawan.map(k => ({
+    NIP: k.NIP, Nama: k.Nama_Lengkap, Jabatan: k.Jabatan,
+    Status: k.Status, Tanggal_Bergabung: k.Tanggal_Bergabung
+  }));
+  exportExcel(data, 'Data_Karyawan.xlsx', 'Karyawan');
+});
+
+/* ============================================================
+ * EXPORT EXCEL HELPER
+ * ============================================================ */
+function exportExcel(data, filename, sheetName){
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Sheet1');
+  XLSX.writeFile(wb, filename);
+}
+</script>
+</body>
+</html>
